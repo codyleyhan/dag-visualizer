@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic DAG Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        :root {
+            --background-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #cccccc;
+            --button-color: #4CAF50;
+            --button-hover: #45a049;
+            --blue-button: #2196F3;
+            --blue-button-hover: #0b7dda;
+            --share-button: #ff9800;
+            --share-button-hover: #e68a00;
+            --info-background: #f8f9fa;
+            --info-border: #2196F3;
+            --error-color: #ff0000;
+            --task-color: #69b3a2;
+            --box-color: #6973b3;
+            --node-stroke: #ffffff;
+            --link-color: #999999;
+            --svg-background: transparent;
+            --toggle-background: #ccc;
+            --toggle-button: #fff;
+        }
+
+        .dark-mode {
+            --background-color: #222222;
+            --text-color: #f0f0f0;
+            --border-color: #555555;
+            --button-color: #388e3c;
+            --button-hover: #2e7d32;
+            --blue-button: #1976d2;
+            --blue-button-hover: #1565c0;
+            --share-button: #e65100;
+            --share-button-hover: #bf360c;
+            --info-background: #333333;
+            --info-border: #1976d2;
+            --error-color: #ff6666;
+            --task-color: #4d8d7b;
+            --box-color: #4d5789;
+            --node-stroke: #2a2a2a;
+            --link-color: #777777;
+            --svg-background: #2a2a2a;
+            --toggle-background: #555;
+            --toggle-button: #333;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+        
+        .container {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+        }
+        
+        .input-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .visualization-area {
+            flex: 2;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+            background-color: var(--svg-background);
+        }
+        
+        textarea {
+            flex: 1;
+            resize: none;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        
+        button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: var(--button-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: var(--button-hover);
+        }
+        
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        h1, h3 {
+            margin-top: 0;
+        }
+        
+        .task-node {
+            fill: var(--task-color);
+            stroke: var(--node-stroke);
+            stroke-width: 2px;
+        }
+        
+        .box-node {
+            fill: var(--box-color);
+            stroke: var(--node-stroke);
+            stroke-width: 2px;
+            rx: 2;
+            ry: 2;
+        }
+        
+        .link {
+            stroke: var(--link-color);
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+        }
+        
+        .node text {
+            font-size: 12px;
+            fill: var(--text-color);
+            pointer-events: none;
+        }
+        
+        .error {
+            color: var(--error-color);
+            margin-top: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        
+        .example-button {
+            background-color: var(--blue-button);
+        }
+        
+        .example-button:hover {
+            background-color: var(--blue-button-hover);
+        }
+        
+        .share-button {
+            background-color: var(--share-button);
+        }
+        
+        .share-button:hover {
+            background-color: var(--share-button-hover);
+        }
+        
+        .info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: var(--info-background);
+            border-radius: 5px;
+            border-left: 5px solid var(--info-border);
+        }
+        
+        .toolbar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 100;
+            display: flex;
+            gap: 5px;
+        }
+        
+        .toolbar button {
+            padding: 5px 10px;
+            margin: 0;
+            font-size: 12px;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 10px;
+            z-index: 100;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .legend-task {
+            background-color: var(--task-color);
+            border-radius: 50%;
+        }
+
+        .legend-box {
+            background-color: var(--box-color);
+            border-radius: 2px;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        /* Toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--toggle-background);
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: var(--toggle-button);
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--button-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .theme-icon {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1>Dynamic DAG Visualizer</h1>
+        <div class="theme-toggle">
+            <span class="theme-icon">☀️</span>
+            <label class="switch">
+                <input type="checkbox" id="theme-toggle">
+                <span class="slider"></span>
+            </label>
+            <span class="theme-icon">🌙</span>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="input-area">
+            <h3>Input DAG as JSON</h3>
+            <p>Format: { "nodes": [{"id": "A", "label": "Node A", "type": "task"}, ...], "edges": [{"source": "A", "target": "B"}, ...] }</p>
+            <p>Node types can be "task" (default, circle) or "box" (rectangular)</p>
+            <textarea id="dag-input" placeholder="Enter your DAG in JSON format..."></textarea>
+            <div class="controls">
+                <button id="visualize-button">Visualize</button>
+                <button id="example-button" class="example-button">Load Example</button>
+                <button id="share-button" class="share-button">Generate Share URL</button>
+            </div>
+            <div id="error" class="error"></div>
+            <div id="info" class="info">
+                <strong>How to use:</strong>
+                <ol>
+                    <li>Enter your DAG in JSON format in the text area</li>
+                    <li>Add "type": "task" or "type": "box" to each node (defaults to "task" if not specified)</li>
+                    <li>Click "Visualize" to see the graph</li>
+                    <li>Or use the "Load Example" button to see a sample DAG</li>
+                    <li>Generate a shareable URL with the "Generate Share URL" button</li>
+                    <li>Toggle between light and dark mode with the switch in the top-right</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="visualization-area">
+            <div class="toolbar">
+                <button id="zoom-in">+</button>
+                <button id="zoom-out">-</button>
+                <button id="reset-zoom">Reset</button>
+            </div>
+            <svg id="dag-visualization" width="100%" height="100%"></svg>
+            <div class="legend">
+                <h4>Legend</h4>
+                <div class="legend-item">
+                    <div class="legend-color legend-task"></div>
+                    <span>Task Node</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color legend-box"></div>
+                    <span>Box Node</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputArea = document.getElementById('dag-input');
+            const visualizeButton = document.getElementById('visualize-button');
+            const exampleButton = document.getElementById('example-button');
+            const shareButton = document.getElementById('share-button');
+            const errorDiv = document.getElementById('error');
+            const svg = document.getElementById('dag-visualization');
+            const zoomInButton = document.getElementById('zoom-in');
+            const zoomOutButton = document.getElementById('zoom-out');
+            const resetZoomButton = document.getElementById('reset-zoom');
+            const themeToggle = document.getElementById('theme-toggle');
+            
+            // Theme toggle functionality
+            themeToggle.addEventListener('change', function() {
+                document.body.classList.toggle('dark-mode');
+                // Re-render the graph if it exists
+                try {
+                    if (inputArea.value) {
+                        const dagData = JSON.parse(inputArea.value);
+                        visualizeDAG(dagData);
+                    }
+                } catch (e) {
+                    // Silent fail if no data or parsing error
+                }
+            });
+            
+            // Check URL parameters first
+            window.onload = function() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const dagParam = urlParams.get('dag');
+                const darkMode = urlParams.get('dark') === 'true';
+                
+                if (darkMode) {
+                    document.body.classList.add('dark-mode');
+                    themeToggle.checked = true;
+                }
+                
+                if (dagParam) {
+                    try {
+                        const decodedDag = decodeURIComponent(dagParam);
+                        const dagData = JSON.parse(decodedDag);
+                        inputArea.value = JSON.stringify(dagData, null, 2);
+                        visualizeDAG(dagData);
+                    } catch (e) {
+                        errorDiv.textContent = `Error parsing DAG from URL: ${e.message}`;
+                    }
+                }
+            };
+            
+            // Example DAG with node types
+            const exampleDAG = {
+                "nodes": [
+                    { "id": "A", "label": "Start", "type": "task" },
+                    { "id": "B", "label": "Process 1", "type": "task" },
+                    { "id": "C", "label": "Process 2", "type": "task" },
+                    { "id": "D", "label": "Decision", "type": "box" },
+                    { "id": "E", "label": "Process 3", "type": "task" },
+                    { "id": "F", "label": "Data Storage", "type": "box" },
+                    { "id": "G", "label": "End", "type": "task" }
+                ],
+                "edges": [
+                    { "source": "A", "target": "B" },
+                    { "source": "A", "target": "C" },
+                    { "source": "B", "target": "D" },
+                    { "source": "C", "target": "D" },
+                    { "source": "D", "target": "E" },
+                    { "source": "D", "target": "F" },
+                    { "source": "E", "target": "G" },
+                    { "source": "F", "target": "G" }
+                ]
+            };
+            
+            // Load example data
+            exampleButton.addEventListener('click', function() {
+                inputArea.value = JSON.stringify(exampleDAG, null, 2);
+                visualizeDAG(exampleDAG);
+            });
+            
+            // Generate share URL
+            shareButton.addEventListener('click', function() {
+                try {
+                    const dagData = JSON.parse(inputArea.value);
+                    const encodedDAG = encodeURIComponent(JSON.stringify(dagData));
+                    const isDarkMode = document.body.classList.contains('dark-mode');
+                    const shareURL = `${window.location.origin}${window.location.pathname}?dag=${encodedDAG}&dark=${isDarkMode}`;
+                    
+                    // Copy to clipboard
+                    navigator.clipboard.writeText(shareURL).then(function() {
+                        alert('Share URL copied to clipboard!');
+                    }, function() {
+                        alert('Share URL: ' + shareURL);
+                    });
+                } catch (e) {
+                    errorDiv.textContent = `Error generating share URL: ${e.message}`;
+                }
+            });
+            
+            // Main visualization function
+            visualizeButton.addEventListener('click', function() {
+                try {
+                    const dagData = JSON.parse(inputArea.value);
+                    visualizeDAG(dagData);
+                    errorDiv.textContent = '';
+                } catch (e) {
+                    errorDiv.textContent = `Error parsing JSON: ${e.message}`;
+                }
+            });
+            
+            // D3.js visualization
+            function visualizeDAG(data) {
+                // Process nodes to ensure they have types
+                data.nodes.forEach(node => {
+                    if (!node.type) node.type = "task"; // Default to task if not specified
+                });
+                
+                // Clear previous visualization
+                d3.select(svg).selectAll("*").remove();
+                
+                // Create SVG element with viewBox for responsiveness
+                const width = svg.clientWidth;
+                const height = svg.clientHeight;
+                
+                // Create a zoom behavior
+                const zoom = d3.zoom()
+                    .scaleExtent([0.1, 4])
+                    .on("zoom", (event) => {
+                        g.attr("transform", event.transform);
+                    });
+                
+                // Apply zoom to the SVG
+                const svgSelection = d3.select(svg)
+                    .call(zoom);
+                
+                // Create a container group for all elements
+                const g = svgSelection.append("g");
+                
+                // Initialize the forces
+                const simulation = d3.forceSimulation(data.nodes)
+                    .force("link", d3.forceLink(data.edges).id(d => d.id).distance(150))
+                    .force("charge", d3.forceManyBody().strength(-500))
+                    .force("center", d3.forceCenter(width / 2, height / 2))
+                    .force("x", d3.forceX(width / 2).strength(0.1))
+                    .force("y", d3.forceY(height / 2).strength(0.1));
+                
+                // Draw the edges
+                const link = g.append("g")
+                    .attr("class", "links")
+                    .selectAll("line")
+                    .data(data.edges)
+                    .enter().append("line")
+                    .attr("class", "link")
+                    .attr("marker-end", "url(#arrowhead)");
+                
+                // Define arrowhead
+                g.append("defs").append("marker")
+                    .attr("id", "arrowhead")
+                    .attr("viewBox", "0 -5 10 10")
+                    .attr("refX", 20)
+                    .attr("refY", 0)
+                    .attr("markerWidth", 6)
+                    .attr("markerHeight", 6)
+                    .attr("orient", "auto")
+                    .append("path")
+                    .attr("d", "M0,-5L10,0L0,5")
+                    .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-color'));
+                
+                // Create node groups
+                const node = g.append("g")
+                    .attr("class", "nodes")
+                    .selectAll(".node")
+                    .data(data.nodes)
+                    .enter().append("g")
+                    .attr("class", "node")
+                    .call(d3.drag()
+                        .on("start", dragstarted)
+                        .on("drag", dragged)
+                        .on("end", dragended));
+                
+                // Add shapes to each node based on type
+                node.each(function(d) {
+                    if (d.type === "box") {
+                        d3.select(this).append("rect")
+                            .attr("width", 60)
+                            .attr("height", 40)
+                            .attr("x", -30)
+                            .attr("y", -20)
+                            .attr("class", "box-node");
+                    } else {
+                        d3.select(this).append("circle")
+                            .attr("r", 30)
+                            .attr("class", "task-node");
+                    }
+                });
+                
+                // Add text labels to each node
+                node.append("text")
+                    .attr("dy", ".35em")
+                    .attr("text-anchor", "middle")
+                    .text(d => d.label || d.id);
+                
+                // Add node IDs for debugging/reference
+                node.append("title")
+                    .text(d => `ID: ${d.id}, Type: ${d.type}`);
+                
+                // Update positions on each tick
+                simulation.on("tick", () => {
+                    link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+                    
+                    node.attr("transform", d => `translate(${d.x}, ${d.y})`);
+                });
+                
+                // Zoom controls
+                zoomInButton.addEventListener('click', () => {
+                    svgSelection.transition().duration(300).call(
+                        zoom.scaleBy, 1.3
+                    );
+                });
+                
+                zoomOutButton.addEventListener('click', () => {
+                    svgSelection.transition().duration(300).call(
+                        zoom.scaleBy, 0.7
+                    );
+                });
+                
+                resetZoomButton.addEventListener('click', () => {
+                    svgSelection.transition().duration(300).call(
+                        zoom.transform, d3.zoomIdentity.translate(width/2, height/2).scale(0.8)
+                    );
+                });
+                
+                // Initial centering with slight zoom out
+                svgSelection.call(
+                    zoom.transform, 
+                    d3.zoomIdentity.translate(width/2, height/2).scale(0.8)
+                );
+                
+                // Drag functions
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+                
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+                
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+            }
+            
+            // Check for cycle in the graph
+            function hasCycle(data) {
+                const nodes = data.nodes.map(n => n.id);
+                const adjacencyList = {};
+                
+                // Initialize adjacency list
+                nodes.forEach(node => {
+                    adjacencyList[node] = [];
+                });
+                
+                // Fill adjacency list
+                data.edges.forEach(edge => {
+                    adjacencyList[edge.source].push(edge.target);
+                });
+                
+                const visited = {};
+                const recStack = {};
+                
+                function isCyclicUtil(node) {
+                    if (!visited[node]) {
+                        visited[node] = true;
+                        recStack[node] = true;
+                        
+                        for (const neighbor of adjacencyList[node]) {
+                            if (!visited[neighbor] && isCyclicUtil(neighbor)) {
+                                return true;
+                            } else if (recStack[neighbor]) {
+                                return true;
+                            }
+                        }
+                    }
+                    
+                    recStack[node] = false;
+                    return false;
+                }
+                
+                for (const node of nodes) {
+                    if (isCyclicUtil(node)) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+        });
+    </script>
+</body>
+</html>
